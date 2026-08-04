@@ -34,6 +34,26 @@
 
 データはアプリ専用のRoomデータベース（`kakeibo.db`）に保存され、ネットワーク通信は行いません。
 
+## GitHub ReleaseへのAPK自動公開
+
+`.github/workflows/release-apk.yml` により、`v1.0.0` のようなタグを `main` にpushすると、テスト・lint・署名付きrelease APKのビルド後、GitHub ReleaseへAPKが自動添付されます。既存Releaseを同じタグで再実行した場合はAPKを置き換えます。
+
+正式版を公開する前に、リポジトリの **Settings → Secrets and variables → Actions** へ次のSecretsを登録してください。keystoreファイルやパスワードはリポジトリへ commit しないでください。
+
+- `ANDROID_SIGNING_KEYSTORE_BASE64`: release用JKS/keystoreをBase64化した値
+- `ANDROID_SIGNING_STORE_PASSWORD`: keystoreのパスワード
+- `ANDROID_SIGNING_KEY_ALIAS`: 署名鍵のalias
+- `ANDROID_SIGNING_KEY_PASSWORD`: 署名鍵のパスワード
+
+keystoreは安全な場所で作成し、Base64値だけをActions Secretへ登録します。Secretsが未設定の場合、ワークフローは未署名APKを公開せずエラーで停止します。
+
+公開例:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
 ## 入力検証
 
 - 金額は1〜9,999,999,999円。空欄、0円、上限超過は保存不可
