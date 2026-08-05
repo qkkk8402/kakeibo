@@ -23,10 +23,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.example.kakeibo"
+        // This identifier is public-facing and must remain stable after the first release.
+        applicationId = "com.qkkk8402.kakeibo"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        versionCode = providers.gradleProperty("releaseVersionCode").map { it.toInt() }.orElse(1).get()
         versionName = providers.gradleProperty("releaseVersionName").orElse("0.1.0").get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

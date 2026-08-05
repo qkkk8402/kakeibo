@@ -25,10 +25,32 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Tag must use the vMAJOR.MINOR.PATCH format (for example, v1.0.0)."
             exit 1
           fi
+
+          version="${RELEASE_TAG#v}"
+          IFS='.' read -r major minor patch_with_suffix <<< "$version"
+          patch="${patch_with_suffix%%[-+]*}"
+          # Keep the value within Android's signed 32-bit versionCode limit and
+          # make it deterministic for a given semantic version.
+          major=$((10#$major))
+          minor=$((10#$minor))
+          patch=$((10#$patch))
+          if (( major > 1999 || minor > 999 || patch > 999 )); then
+            echo "::error::Version components must be major<=1999, minor<=999, patch<=999."
+            exit 1
+          fi
+          version_code=$((major * 1000000 + minor * 1000 + patch))
+          if (( version_code < 1 || version_code > 2100000000 )); then
+            echo "::error::Computed versionCode is outside Android's supported range."
+            exit 1
+          fi
+          {
+            echo "RELEASE_VERSION=$version"
+            echo "RELEASE_VERSION_CODE=$version_code"
+          } >> "$GITHUB_ENV"
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -66,11 +88,11 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_SIGNING_STORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_SIGNING_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_SIGNING_KEY_PASSWORD }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           ./gradlew :app:assembleRelease \
-            -PreleaseVersionName="${RELEASE_TAG#v}" \
+            -PreleaseVersionName="$RELEASE_VERSION" \
+            -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
             --no-daemon --stacktrace
 
       - name: Create or update GitHub Release

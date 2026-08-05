@@ -17,6 +17,7 @@
 - Room
 - Gradle Wrapper 8.13
 - compileSdk 36 / minSdk 26
+- applicationId `com.qkkk8402.kakeibo`
 
 ## ビルド・テスト
 
@@ -46,6 +47,10 @@
 - `ANDROID_SIGNING_KEY_PASSWORD`: 署名鍵のパスワード
 
 keystoreは安全な場所で作成し、Base64値だけをActions Secretへ登録します。Secretsが未設定の場合、ワークフローは未署名APKを公開せずエラーで停止します。
+
+署名鍵は将来の更新でも同じものを使う必要があります。keystoreとパスワードのバックアップを安全に保管してからSecretsへ登録してください。リポジトリの公開設定からは署名鍵を復元できません。
+
+タグの`vMAJOR.MINOR.PATCH`（プレリリース suffixなし）からAndroidの`versionCode`を決定的に生成します（major 1999以下、minor/patch 999以下）。そのため、リリースごとにタグのバージョンを上げてください。
 
 公開例:
 
