@@ -37,18 +37,7 @@
 
 ## GitHub ReleaseへのAPK自動公開
 
-`.github/workflows/release-apk.yml` により、`v1.0.0` のようなタグを `main` にpushすると、テスト・lint・署名付きrelease APKのビルド後、GitHub ReleaseへAPKが自動添付されます。既存Releaseを同じタグで再実行した場合はAPKを置き換えます。
-
-正式版を公開する前に、リポジトリの **Settings → Secrets and variables → Actions** へ次のSecretsを登録してください。keystoreファイルやパスワードはリポジトリへ commit しないでください。
-
-- `ANDROID_SIGNING_KEYSTORE_BASE64`: release用JKS/keystoreをBase64化した値
-- `ANDROID_SIGNING_STORE_PASSWORD`: keystoreのパスワード
-- `ANDROID_SIGNING_KEY_ALIAS`: 署名鍵のalias
-- `ANDROID_SIGNING_KEY_PASSWORD`: 署名鍵のパスワード
-
-keystoreは安全な場所で作成し、Base64値だけをActions Secretへ登録します。Secretsが未設定の場合、ワークフローは未署名APKを公開せずエラーで停止します。
-
-署名鍵は将来の更新でも同じものを使う必要があります。keystoreとパスワードのバックアップを安全に保管してからSecretsへ登録してください。リポジトリの公開設定からは署名鍵を復元できません。
+`.github/workflows/release-apk.yml` により、`v1.0.0` のようなタグを `main` にpushすると、テスト・lint・署名付きrelease APKのビルド後、GitHub ReleaseへAPKが自動添付されます。
 
 タグの`vMAJOR.MINOR.PATCH`（プレリリース suffixなし）からAndroidの`versionCode`を決定的に生成します（major 1999以下、minor/patch 999以下）。そのため、リリースごとにタグのバージョンを上げてください。
 
