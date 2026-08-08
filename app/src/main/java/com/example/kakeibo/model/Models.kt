@@ -33,8 +33,19 @@ data class TransactionModel(
     val categoryId: Long,
     val categoryName: String,
     val date: LocalDate,
-    val memo: String?
+    val memo: String?,
+    val iconKey: String = "more",
+    val colorArgb: Int = 0xFF90A4AE.toInt()
 )
+
+data class CategoryBudgetSummary(
+    val category: CategoryModel,
+    val spent: Long,
+    val budget: Long?
+) {
+    val remaining: Long? get() = budget?.minus(spent)
+    val usageRatio: Float? get() = budget?.takeIf { it > 0 }?.let { spent.toFloat() / it }
+}
 
 fun monthRange(month: YearMonth): LongRange {
     return month.atDay(1).toEpochDay() until month.plusMonths(1).atDay(1).toEpochDay()

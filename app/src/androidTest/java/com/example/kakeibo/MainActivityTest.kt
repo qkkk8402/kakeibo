@@ -7,7 +7,6 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
@@ -20,9 +19,17 @@ class MainActivityTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
 
+    private fun enterAmount(value: String) {
+        value.forEach { digit ->
+            composeRule.onNodeWithTag("amount_key_$digit").performClick()
+        }
+    }
+
     @Test
     fun homeScreenIsShownOnLaunch() {
         composeRule.onNodeWithText("ホーム").assertIsDisplayed()
+        composeRule.onNodeWithText("履歴").assertIsDisplayed()
+        composeRule.onNodeWithText("カテゴリ").assertIsDisplayed()
         composeRule.onNodeWithText("今月の予算").assertIsDisplayed()
         composeRule.onNodeWithText("＋ 記録").assertIsDisplayed()
     }
@@ -30,7 +37,7 @@ class MainActivityTest {
     @Test
     fun emptyAmountShowsValidationError() {
         composeRule.onNodeWithText("＋ 記録").performClick()
-        composeRule.onNodeWithText("保存").performClick()
+        composeRule.onNodeWithTag("transaction_save").performClick()
 
         composeRule.onNodeWithText("金額を入力してください").assertIsDisplayed()
         composeRule.onNodeWithText("カテゴリを選択してください").assertIsDisplayed()
@@ -39,8 +46,8 @@ class MainActivityTest {
     @Test
     fun zeroAmountShowsMinimumError() {
         composeRule.onNodeWithText("＋ 記録").performClick()
-        composeRule.onNodeWithText("金額（円）").performTextInput("0")
-        composeRule.onNodeWithText("保存").performClick()
+        enterAmount("0")
+        composeRule.onNodeWithTag("transaction_save").performClick()
 
         composeRule.onNodeWithText("1円以上で入力してください").assertIsDisplayed()
     }
@@ -48,8 +55,8 @@ class MainActivityTest {
     @Test
     fun amountOverMaximumShowsOverflowError() {
         composeRule.onNodeWithText("＋ 記録").performClick()
-        composeRule.onNodeWithText("金額（円）").performTextInput("10000000000")
-        composeRule.onNodeWithText("保存").performClick()
+        composeRule.onNodeWithTag("amount_input").performTextReplacement("10000000000")
+        composeRule.onNodeWithTag("transaction_save").performClick()
 
         composeRule.onNodeWithText("金額が大きすぎます").assertIsDisplayed()
     }
@@ -60,9 +67,9 @@ class MainActivityTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText("食費").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("金額（円）").performTextInput(" 1000 ")
+        composeRule.onNodeWithTag("amount_input").performTextReplacement(" 1000 ")
         composeRule.onNodeWithText("食費").performClick()
-        composeRule.onNodeWithText("保存").performClick()
+        composeRule.onNodeWithTag("transaction_save").performClick()
 
         assertTrue(composeRule.onAllNodesWithText("1,000円").fetchSemanticsNodes().isNotEmpty())
     }
@@ -71,8 +78,9 @@ class MainActivityTest {
     fun budgetWithWhitespaceIsSavedAfterTrimming() {
         composeRule.onNodeWithText("今月の予算").assertIsDisplayed()
         composeRule.onNodeWithTag("budget_action").performClick()
-        composeRule.onNodeWithText("予算（円）").performTextReplacement(" 5000 ")
-        composeRule.onNodeWithText("保存").performClick()
+        composeRule.onNodeWithTag("budget_mode_monthly").performClick()
+        composeRule.onNodeWithTag("budget_amount_input").performTextReplacement(" 5000 ")
+        composeRule.onNodeWithTag("budget_save").performClick()
 
         assertTrue(composeRule.onAllNodesWithText("5,000円", substring = true).fetchSemanticsNodes().isNotEmpty())
     }
@@ -93,9 +101,9 @@ class MainActivityTest {
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText("食費").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithText("金額（円）").performTextInput("7654321")
+        enterAmount("7654321")
         composeRule.onNodeWithText("食費").performClick()
-        composeRule.onNodeWithText("保存").performTouchInput {
+        composeRule.onNodeWithTag("transaction_save").performTouchInput {
             click()
             click()
         }

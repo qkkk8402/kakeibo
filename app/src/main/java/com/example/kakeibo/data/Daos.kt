@@ -13,9 +13,16 @@ data class MonthlyTotals(
     val expense: Long
 )
 
+data class CategoryMonthlyTotal(
+    @androidx.room.ColumnInfo(name = "category_id") val categoryId: Long,
+    val spent: Long
+)
+
 data class TransactionWithCategory(
     @androidx.room.Embedded val transaction: TransactionEntity,
-    @androidx.room.ColumnInfo(name = "category_name") val categoryName: String
+    @androidx.room.ColumnInfo(name = "category_name") val categoryName: String,
+    @androidx.room.ColumnInfo(name = "category_icon_key") val categoryIconKey: String,
+    @androidx.room.ColumnInfo(name = "category_color_argb") val categoryColorArgb: Int
 )
 
 @Dao
@@ -43,13 +50,16 @@ interface CategoryDao {
 
     @Query("UPDATE categories SET name = :name, updated_at = :updatedAt WHERE id = :id")
     suspend fun rename(id: Long, name: String, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE categories SET icon_key = :iconKey, color_argb = :colorArgb, updated_at = :updatedAt WHERE id = :id")
+    suspend fun updateAppearance(id: Long, iconKey: String, colorArgb: Int, updatedAt: Long = System.currentTimeMillis())
 }
 
 @Dao
 interface TransactionDao {
     @Query(
         """
-        SELECT t.*, c.name AS category_name
+        SELECT t.*, c.name AS category_name, c.icon_key AS category_icon_key, c.color_argb AS category_color_argb
         FROM transactions t INNER JOIN categories c ON c.id = t.category_id
         WHERE t.transaction_date >= :fromDay AND t.transaction_date < :untilDay
         ORDER BY t.transaction_date DESC, t.created_at DESC
@@ -59,7 +69,7 @@ interface TransactionDao {
 
     @Query(
         """
-        SELECT t.*, c.name AS category_name
+        SELECT t.*, c.name AS category_name, c.icon_key AS category_icon_key, c.color_argb AS category_color_argb
         FROM transactions t INNER JOIN categories c ON c.id = t.category_id
         WHERE t.id = :id
         """
@@ -76,6 +86,16 @@ interface TransactionDao {
         """
     )
     fun observeTotals(fromDay: Long, untilDay: Long): Flow<MonthlyTotals>
+
+    @Query(
+        """
+        SELECT category_id, COALESCE(SUM(amount), 0) AS spent
+        FROM transactions
+        WHERE transaction_date >= :fromDay AND transaction_date < :untilDay AND type = 'EXPENSE'
+        GROUP BY category_id
+        """
+    )
+    fun observeExpenseByCategory(fromDay: Long, untilDay: Long): Flow<List<CategoryMonthlyTotal>>
 
     @Insert
     suspend fun insert(transaction: TransactionEntity): Long
@@ -97,4 +117,22 @@ interface BudgetDao {
 
     @Query("DELETE FROM monthly_budgets WHERE year_month = :yearMonth")
     suspend fun delete(yearMonth: String)
+
+    @Query("SELECT * FROM budget_settings WHERE id = 1")
+    fun observeDefault(): Flow<BudgetSettingsEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertDefault(settings: BudgetSettingsEntity)
+
+    @Query("DELETE FROM budget_settings WHERE id = 1")
+    suspend fun deleteDefault()
+
+    @Query("SELECT * FROM category_budgets ORDER BY category_id")
+    fun observeCategoryBudgets(): Flow<List<CategoryBudgetEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCategoryBudget(budget: CategoryBudgetEntity)
+
+    @Query("DELETE FROM category_budgets WHERE category_id = :categoryId")
+    suspend fun deleteCategoryBudget(categoryId: Long)
 }

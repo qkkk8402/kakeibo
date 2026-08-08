@@ -5,10 +5,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [CategoryEntity::class, TransactionEntity::class, MonthlyBudgetEntity::class],
-    version = 1,
+    entities = [CategoryEntity::class, TransactionEntity::class, MonthlyBudgetEntity::class, BudgetSettingsEntity::class, CategoryBudgetEntity::class],
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -25,7 +27,19 @@ abstract class AppDatabase : RoomDatabase() {
                 context.applicationContext,
                 AppDatabase::class.java,
                 "kakeibo.db"
-            ).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+        }
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS budget_settings (id INTEGER NOT NULL, amount INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(id))"
+                )
+                database.execSQL(
+                    "CREATE TABLE IF NOT EXISTS category_budgets (category_id INTEGER NOT NULL, amount INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, PRIMARY KEY(category_id), FOREIGN KEY(category_id) REFERENCES categories(id) ON UPDATE NO ACTION ON DELETE RESTRICT)"
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS index_category_budgets_category_id ON category_budgets(category_id)")
+            }
         }
     }
 }

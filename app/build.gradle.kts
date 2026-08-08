@@ -22,6 +22,12 @@ android {
     namespace = "com.example.kakeibo"
     compileSdk = 36
 
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
+
     defaultConfig {
         // This identifier is public-facing and must remain stable after the first release.
         applicationId = "com.qkkk8402.kakeibo"
@@ -103,6 +109,7 @@ dependencies {
     testImplementation("androidx.arch.core:core-testing:2.2.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation("androidx.room:room-testing:2.6.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
