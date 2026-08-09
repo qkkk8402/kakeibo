@@ -112,24 +112,6 @@ interface TransactionDao {
 
 @Dao
 interface BudgetDao {
-    @Query("SELECT * FROM monthly_budgets WHERE year_month = :yearMonth")
-    fun observe(yearMonth: String): Flow<MonthlyBudgetEntity?>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(budget: MonthlyBudgetEntity)
-
-    @Query("DELETE FROM monthly_budgets WHERE year_month = :yearMonth")
-    suspend fun delete(yearMonth: String)
-
-    @Query("SELECT * FROM budget_settings WHERE id = 1")
-    fun observeDefault(): Flow<BudgetSettingsEntity?>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertDefault(settings: BudgetSettingsEntity)
-
-    @Query("DELETE FROM budget_settings WHERE id = 1")
-    suspend fun deleteDefault()
-
     @Query("SELECT * FROM category_budgets ORDER BY category_id")
     fun observeCategoryBudgets(): Flow<List<CategoryBudgetEntity>>
 
@@ -138,4 +120,7 @@ interface BudgetDao {
 
     @Query("DELETE FROM category_budgets WHERE category_id = :categoryId")
     suspend fun deleteCategoryBudget(categoryId: Long)
+
+    @Query("DELETE FROM category_budgets")
+    suspend fun deleteAllCategoryBudgets()
 }

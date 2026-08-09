@@ -47,22 +47,6 @@ data class TransactionEntity(
     @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis()
 )
 
-@Entity(tableName = "monthly_budgets")
-data class MonthlyBudgetEntity(
-    @PrimaryKey @ColumnInfo(name = "year_month") val yearMonth: String,
-    val amount: Long,
-    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
-    @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis()
-)
-
-@Entity(tableName = "budget_settings")
-data class BudgetSettingsEntity(
-    @PrimaryKey val id: Int = 1,
-    val amount: Long,
-    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
-    @ColumnInfo(name = "updated_at") val updatedAt: Long = System.currentTimeMillis()
-)
-
 @Entity(
     tableName = "category_budgets",
     foreignKeys = [

@@ -12,7 +12,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.kakeibo.data.AppDatabase
-import java.time.YearMonth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -30,6 +29,7 @@ class MainActivityTest {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         withContext(Dispatchers.IO) {
             AppDatabase.get(context).transactionDao().deleteAll()
+            AppDatabase.get(context).budgetDao().deleteAllCategoryBudgets()
         }
     }
 
@@ -92,21 +92,26 @@ class MainActivityTest {
     fun budgetWithWhitespaceIsSavedAfterTrimming() {
         composeRule.onNodeWithText("今月の予算").assertIsDisplayed()
         composeRule.onNodeWithTag("budget_action").performClick()
-        composeRule.onNodeWithTag("budget_mode_monthly").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("食費").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("食費").performClick()
         composeRule.onNodeWithTag("budget_amount_input").performTextReplacement(" 5000 ")
         composeRule.onNodeWithTag("budget_save").performClick()
 
-        assertTrue(composeRule.onAllNodesWithText("5,000円", substring = true).fetchSemanticsNodes().isNotEmpty())
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("合計 5,000円").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText("合計 5,000円").assertIsDisplayed()
     }
 
     @Test
-    fun budgetScreenKeepsSelectedPreviousMonth() {
-        val previousMonth = YearMonth.now().minusMonths(1)
-
-        composeRule.onNodeWithText("‹").performClick()
+    fun budgetSettingsUsesSingleCategoryList() {
         composeRule.onNodeWithTag("budget_action").performClick()
 
-        composeRule.onNodeWithText("${previousMonth.year}年${previousMonth.monthValue}月").assertIsDisplayed()
+        composeRule.onNodeWithText("予算設定").assertIsDisplayed()
+        composeRule.onNodeWithText("合計 0円").assertIsDisplayed()
+        composeRule.onAllNodesWithText("カテゴリ別予算を設定").assertCountEquals(0)
     }
 
     @Test

@@ -2,6 +2,9 @@
 
 package com.example.kakeibo.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +26,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -52,6 +54,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,6 +64,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.AccessibilityAction
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
@@ -106,11 +112,8 @@ import kotlinx.coroutines.launch
 private const val HOME = "home"
 private const val HISTORY = "history"
 private const val EDITOR = "editor?transactionId={transactionId}"
-private const val BUDGET = "budget?yearMonth={yearMonth}"
-private const val CATEGORY_BUDGETS = "categoryBudgets?yearMonth={yearMonth}"
+private const val BUDGET = "budget"
 private const val CATEGORIES = "categories"
-private const val DEFAULT_BUDGET_MODE = "default"
-private const val MONTHLY_BUDGET_MODE = "monthly"
 
 @Composable
 fun KakeiboApp(repository: KakeiboRepository) {
@@ -137,7 +140,7 @@ fun KakeiboApp(repository: KakeiboRepository) {
     ) { padding ->
         NavHost(navController, startDestination = HOME, modifier = Modifier.padding(padding)) {
             composable(HOME) {
-                HomeScreen(repository, onAdd = { navController.navigate("editor?transactionId=-1") }, onBudget = { month -> navController.navigate("budget?yearMonth=$month") }, onOpen = { navController.navigate("editor?transactionId=$it") })
+                HomeScreen(repository, onAdd = { navController.navigate("editor?transactionId=-1") }, onBudget = { navController.navigate(BUDGET) }, onOpen = { navController.navigate("editor?transactionId=$it") })
             }
             composable(HISTORY) {
                 HistoryScreen(repository, onOpen = { navController.navigate("editor?transactionId=$it") }, onAdd = { navController.navigate("editor?transactionId=-1") })
@@ -153,24 +156,7 @@ fun KakeiboApp(repository: KakeiboRepository) {
                     onCategoryManagement = { navController.navigate(CATEGORIES) }
                 )
             }
-            composable(
-                route = BUDGET,
-                arguments = listOf(navArgument("yearMonth") { type = NavType.StringType; defaultValue = YearMonth.now().toString() })
-            ) { entry ->
-                val initialMonth = entry.arguments?.getString("yearMonth")
-                    ?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
-                    ?: YearMonth.now()
-                BudgetScreen(repository, initialMonth, onBack = { navController.navigateUp() }, onCategoryBudget = { navController.navigate("categoryBudgets?yearMonth=$initialMonth") })
-            }
-            composable(
-                route = CATEGORY_BUDGETS,
-                arguments = listOf(navArgument("yearMonth") { type = NavType.StringType; defaultValue = YearMonth.now().toString() })
-            ) { entry ->
-                val initialMonth = entry.arguments?.getString("yearMonth")
-                    ?.let { runCatching { YearMonth.parse(it) }.getOrNull() }
-                    ?: YearMonth.now()
-                CategoryBudgetScreen(repository, initialMonth, onBack = { navController.navigateUp() })
-            }
+            composable(BUDGET) { BudgetScreen(repository, onBack = { navController.navigateUp() }) }
             composable(CATEGORIES) { CategoryScreen(repository) }
         }
     }
@@ -186,7 +172,7 @@ private fun MonthSelector(month: YearMonth, onPrevious: () -> Unit, onNext: () -
 }
 
 @Composable
-private fun HomeScreen(repository: KakeiboRepository, onAdd: () -> Unit, onBudget: (YearMonth) -> Unit, onOpen: (Long) -> Unit) {
+private fun HomeScreen(repository: KakeiboRepository, onAdd: () -> Unit, onBudget: () -> Unit, onOpen: (Long) -> Unit) {
     var month by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     val selectedMonth = YearMonth.parse(month)
     val summary by remember(selectedMonth) { repository.observeSummary(selectedMonth) }.collectAsState(initial = MonthlySummary(selectedMonth))
@@ -198,10 +184,10 @@ private fun HomeScreen(repository: KakeiboRepository, onAdd: () -> Unit, onBudge
         LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { MonthSelector(selectedMonth, { month = selectedMonth.minusMonths(1).toString() }, { month = selectedMonth.plusMonths(1).toString() }) }
             item {
-                BudgetCard(summary, { onBudget(selectedMonth) })
+                BudgetCard(summary, onBudget)
             }
             if (categoryBudgets.any { it.budget != null || it.spent > 0 }) {
-                item { CategoryBudgetOverview(categoryBudgets) }
+                item { CategoryBudgetOverview(selectedMonth, categoryBudgets) }
             }
             item { SummaryCard(summary) }
             item {
@@ -228,8 +214,62 @@ private fun HomeScreen(repository: KakeiboRepository, onAdd: () -> Unit, onBudge
 }
 
 @Composable
+private fun BudgetProgressBar(month: YearMonth, ratio: Float, overBudget: Boolean, modifier: Modifier = Modifier) {
+    val darkTheme = isSystemInDarkTheme()
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (darkTheme) 0.28f else 0.20f)
+    val progressColor = when {
+        overBudget -> MaterialTheme.colorScheme.error
+        darkTheme -> Color(0xFF54D6E8)
+        else -> Color(0xFF007C91)
+    }
+    val markerColor = MaterialTheme.colorScheme.onSurface
+    val markerOutline = MaterialTheme.colorScheme.surface
+    val todayRatio = if (month == YearMonth.now()) {
+        LocalDate.now().dayOfMonth.toFloat() / month.lengthOfMonth()
+    } else {
+        null
+    }
+    val accessibilityText = if (overBudget) {
+        "予算超過"
+    } else {
+        "予算使用率 ${((ratio.coerceAtLeast(0f)) * 100).toInt()}パーセント"
+    }
+
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(16.dp)
+            .semantics { contentDescription = accessibilityText }
+    ) {
+        val radius = size.height / 2f
+        drawRoundRect(trackColor, cornerRadius = CornerRadius(radius, radius))
+        val progressWidth = size.width * ratio.coerceIn(0f, 1f)
+        if (progressWidth > 0f) {
+            drawRoundRect(
+                color = progressColor,
+                size = Size(progressWidth, size.height),
+                cornerRadius = CornerRadius(radius, radius)
+            )
+        }
+        todayRatio?.let {
+            val x = (size.width * it).coerceIn(2.dp.toPx(), size.width - 2.dp.toPx())
+            drawLine(markerOutline, Offset(x, -2.dp.toPx()), Offset(x, size.height + 2.dp.toPx()), 5.dp.toPx())
+            drawLine(markerColor, Offset(x, -2.dp.toPx()), Offset(x, size.height + 2.dp.toPx()), 2.dp.toPx())
+        }
+    }
+}
+
+@Composable
 private fun BudgetCard(summary: MonthlySummary, onBudget: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
+    val remaining = summary.remainingBudget
+    val overBudget = remaining != null && remaining < 0
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (overBudget) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant
+        ),
+        border = if (overBudget) BorderStroke(2.dp, MaterialTheme.colorScheme.error) else null,
+        modifier = Modifier.fillMaxWidth()
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 val title = if (summary.month == YearMonth.now()) "今月の予算" else "${summary.month.year}年${summary.month.monthValue}月の予算"
@@ -237,21 +277,25 @@ private fun BudgetCard(summary: MonthlySummary, onBudget: () -> Unit) {
                 TextButton(onClick = onBudget, modifier = Modifier.testTag("budget_action")) { Text(if (summary.budget == null) "設定" else "変更") }
             }
             if (summary.budget == null) {
-                Text("予算を設定すると、使える残額を確認できます")
+                Text("予算未設定", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 Text("${yen(summary.expense)} / ${yen(summary.budget)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(progress = { (summary.usageRatio ?: 0f).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                BudgetProgressBar(summary.month, summary.usageRatio ?: 0f, overBudget, Modifier.testTag("budget_progress"))
                 Spacer(Modifier.height(6.dp))
-                val remaining = summary.remainingBudget ?: 0
-                Text(if (remaining >= 0) "残り ${yen(remaining)}" else "${yen(-remaining)} 超過", color = if (remaining >= 0) Color.Unspecified else MaterialTheme.colorScheme.error)
+                val remainingAmount = remaining ?: 0
+                Text(
+                    if (remainingAmount >= 0) "残り ${yen(remainingAmount)}" else "${yen(-remainingAmount)} 超過",
+                    color = if (remainingAmount >= 0) Color.Unspecified else MaterialTheme.colorScheme.error,
+                    fontWeight = if (remainingAmount < 0) FontWeight.Bold else FontWeight.Normal
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CategoryBudgetOverview(summaries: List<CategoryBudgetSummary>) {
+private fun CategoryBudgetOverview(month: YearMonth, summaries: List<CategoryBudgetSummary>) {
     val visible = summaries.filter { it.budget != null || it.spent > 0 }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -278,15 +322,11 @@ private fun CategoryBudgetOverview(summaries: List<CategoryBudgetSummary>) {
                         }
                         if (item.budget != null) {
                             Spacer(Modifier.height(4.dp))
-                            LinearProgressIndicator(
-                                progress = { (ratio ?: 0f).coerceIn(0f, 1f) },
-                                color = if (over != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.fillMaxWidth()
-                            )
+                            BudgetProgressBar(month, ratio ?: 0f, overBudget = over != null)
                             Text(
                                 when {
-                                    over != null -> "${yen(-over)} 超過（${((ratio ?: 0f) * 100).toInt()}%）"
-                                    remaining != null -> "残り ${yen(remaining)}（${((ratio ?: 0f) * 100).toInt()}%）"
+                                    over != null -> "${yen(-over)} 超過"
+                                    remaining != null -> "残り ${yen(remaining)}"
                                     else -> ""
                                 },
                                 style = MaterialTheme.typography.labelSmall,
@@ -676,139 +716,21 @@ private fun EditorScreen(
 }
 
 @Composable
-private fun BudgetScreen(repository: KakeiboRepository, initialMonth: YearMonth, onBack: () -> Unit, onCategoryBudget: () -> Unit) {
+private fun BudgetScreen(repository: KakeiboRepository, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var monthText by rememberSaveable { mutableStateOf(initialMonth.toString()) }
-    val month = YearMonth.parse(monthText)
-    val defaultBudget by repository.observeDefaultBudget().collectAsState(initial = null)
-    val monthlyOverride by remember(month) { repository.observeMonthlyBudget(month) }.collectAsState(initial = null)
-    var mode by rememberSaveable { mutableStateOf(DEFAULT_BUDGET_MODE) }
-    var amount by rememberSaveable(monthText) { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    var isSaving by remember { mutableStateOf(false) }
-    LaunchedEffect(defaultBudget, monthlyOverride, mode, month) {
-        amount = if (mode == DEFAULT_BUDGET_MODE) defaultBudget?.toString().orEmpty()
-        else (monthlyOverride ?: defaultBudget)?.toString().orEmpty()
-        error = null
-    }
-
-    fun saveBudgetValue() {
-        if (!isSaving) {
-            val parsed = parseAmountText(amount)
-            error = validateAmountText(amount)?.replace("金額", "予算")
-            if (error == null) {
-                isSaving = true
-                scope.launch(Dispatchers.Main.immediate) {
-                    try {
-                        if (mode == DEFAULT_BUDGET_MODE) repository.saveDefaultBudget(parsed)
-                        else repository.saveBudget(month, parsed)
-                        onBack()
-                    } finally {
-                        isSaving = false
-                    }
-                }
-            }
-        }
-    }
-
-    fun clearBudgetValue() {
-        if (!isSaving) {
-            isSaving = true
-            scope.launch(Dispatchers.Main.immediate) {
-                try {
-                    if (mode == DEFAULT_BUDGET_MODE) repository.saveDefaultBudget(null)
-                    else repository.saveBudget(month, null)
-                } finally {
-                    isSaving = false
-                }
-            }
-        }
-    }
-
-    val hasValueToClear = if (mode == DEFAULT_BUDGET_MODE) defaultBudget != null else monthlyOverride != null
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("月の予算") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る") } }) },
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                Button(
-                    enabled = !isSaving,
-                    onClick = ::saveBudgetValue,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp).testTag("budget_save")
-                ) { Text("保存") }
-            }
-        }
-    ) { inner ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item { MonthSelector(month, { monthText = month.minusMonths(1).toString() }, { monthText = month.plusMonths(1).toString() }) }
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            FilterChip(
-                                selected = mode == DEFAULT_BUDGET_MODE,
-                                onClick = { mode = DEFAULT_BUDGET_MODE },
-                                label = { Text("毎月の基本予算") },
-                                modifier = Modifier.testTag("budget_mode_default")
-                            )
-                            FilterChip(
-                                selected = mode == MONTHLY_BUDGET_MODE,
-                                onClick = { mode = MONTHLY_BUDGET_MODE },
-                                label = { Text("この月だけ") },
-                                modifier = Modifier.testTag("budget_mode_monthly")
-                            )
-                        }
-                        Text(
-                            if (mode == DEFAULT_BUDGET_MODE) "毎月自動的に適用する予算です"
-                            else "${month.year}年${month.monthValue}月だけに適用する予算です",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        AmountInput(amount, { amount = it; error = null }, error, "予算（円）", fieldTestTag = "budget_amount_input", keypadTestTagPrefix = "budget_key")
-                        if (hasValueToClear) {
-                            TextButton(enabled = !isSaving, onClick = ::clearBudgetValue, modifier = Modifier.fillMaxWidth()) {
-                                Text(if (mode == DEFAULT_BUDGET_MODE) "基本予算を解除" else "この月の上書きを解除")
-                            }
-                        }
-                        OutlinedButton(onClick = onCategoryBudget, modifier = Modifier.fillMaxWidth()) { Text("カテゴリ別予算を設定") }
-                    }
-                }
-            }
-            item { Spacer(Modifier.height(24.dp)) }
-        }
-    }
-}
-
-@Composable
-private fun CategoryBudgetScreen(repository: KakeiboRepository, initialMonth: YearMonth, onBack: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var monthText by rememberSaveable { mutableStateOf(initialMonth.toString()) }
-    val month = YearMonth.parse(monthText)
-    val summaries by remember(month) { repository.observeCategoryBudgetSummaries(month) }.collectAsState(initial = emptyList())
-    val defaultBudget by repository.observeDefaultBudget().collectAsState(initial = null)
+    val summaries by remember { repository.observeCategoryBudgetSummaries(YearMonth.now()) }.collectAsState(initial = emptyList())
     var editing by remember { mutableStateOf<CategoryBudgetSummary?>(null) }
     var draftAmount by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     Scaffold(topBar = {
-        TopAppBar(title = { Text("カテゴリ別予算") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る") } })
+        TopAppBar(title = { Text("予算設定") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "戻る") } })
     }) { inner ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(inner).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item { MonthSelector(month, { monthText = month.minusMonths(1).toString() }, { monthText = month.plusMonths(1).toString() }) }
-            item { Text("カテゴリごとの予算は毎月繰り返し適用されます", style = MaterialTheme.typography.bodySmall) }
             item {
                 val categoryTotal = summaries.mapNotNull { it.budget }.sum()
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer), modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Text("設定済み合計 ${yen(categoryTotal)} / 月", fontWeight = FontWeight.Bold)
-                        val totalBudget = defaultBudget
-                        if (totalBudget != null) {
-                            val unallocated = totalBudget - categoryTotal
-                            Text(
-                                if (unallocated >= 0) "未配分 ${yen(unallocated)}" else "総予算を ${yen(-unallocated)} 超過",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (unallocated < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
+                    Text("合計 ${yen(categoryTotal)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
                 }
             }
             items(summaries, key = { it.category.id }) { item ->
@@ -829,20 +751,8 @@ private fun CategoryBudgetScreen(repository: KakeiboRepository, initialMonth: Ye
                             modifier = Modifier.size(40.dp)
                         ) { CategoryIcon(item.category, Modifier.padding(8.dp)) }
                         Spacer(Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            val remaining = item.remaining
-                            Text(item.category.name, fontWeight = FontWeight.Bold)
-                            Text(
-                                when {
-                                    item.budget == null -> "予算未設定"
-                                    remaining != null && remaining < 0 -> "${yen(-remaining)} 超過"
-                                    else -> "${yen(item.budget)} / 月"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (remaining != null && remaining < 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Text("設定", color = MaterialTheme.colorScheme.primary)
+                        Text(item.category.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                        Text(item.budget?.let(::yen) ?: "—", color = if (item.budget == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
@@ -860,9 +770,9 @@ private fun CategoryBudgetScreen(repository: KakeiboRepository, initialMonth: Ye
                     Text("${item.category.name}の予算")
                 }
             },
-            text = { AmountInput(draftAmount, { draftAmount = it; error = null }, error, "予算（円）") },
+            text = { AmountInput(draftAmount, { draftAmount = it; error = null }, error, "予算（円）", fieldTestTag = "budget_amount_input", keypadTestTagPrefix = "budget_key") },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(modifier = Modifier.testTag("budget_save"), onClick = {
                     val parsed = parseAmountText(draftAmount)
                     error = validateAmountText(draftAmount)?.replace("金額", "予算")
                     if (error == null) {

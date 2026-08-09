@@ -21,7 +21,7 @@ class DatabaseMigrationTest {
     )
 
     @Test
-    fun migrate1To2PreservesExistingDataAndCreatesBudgetTables() {
+    fun migrate1To3DropsLegacyBudgetsAndCreatesCategoryBudgets() {
         helper.createDatabase("migration-test", 1).apply {
             execSQL(
                 "INSERT INTO monthly_budgets(year_month, amount, created_at, updated_at) " +
@@ -30,18 +30,14 @@ class DatabaseMigrationTest {
             close()
         }
 
-        val db = helper.runMigrationsAndValidate("migration-test", 2, true, AppDatabase.MIGRATION_1_2)
-        db.query("SELECT amount FROM monthly_budgets WHERE year_month = '2026-08'").use { cursor ->
-            check(cursor.moveToFirst())
-            assertEquals(100000L, cursor.getLong(0))
-        }
+        val db = helper.runMigrationsAndValidate("migration-test", 3, true, AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
         db.query(
             "SELECT name FROM sqlite_master WHERE type = 'table' " +
-                "AND name IN ('budget_settings', 'category_budgets') ORDER BY name"
+                "AND name IN ('monthly_budgets', 'budget_settings', 'category_budgets') ORDER BY name"
         ).use { cursor ->
-            var count = 0
-            while (cursor.moveToNext()) count++
-            assertEquals(2, count)
+            check(cursor.moveToFirst())
+            assertEquals("category_budgets", cursor.getString(0))
+            assertEquals(false, cursor.moveToNext())
         }
         db.close()
     }

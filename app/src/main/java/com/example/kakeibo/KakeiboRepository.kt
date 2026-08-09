@@ -2,9 +2,7 @@ package com.example.kakeibo
 
 import com.example.kakeibo.data.AppDatabase
 import com.example.kakeibo.data.CategoryEntity
-import com.example.kakeibo.data.BudgetSettingsEntity
 import com.example.kakeibo.data.CategoryBudgetEntity
-import com.example.kakeibo.data.MonthlyBudgetEntity
 import com.example.kakeibo.data.TransactionEntity
 import com.example.kakeibo.model.CategoryModel
 import com.example.kakeibo.model.MAX_AMOUNT_YEN
@@ -49,16 +47,19 @@ class KakeiboRepository(private val db: AppDatabase) {
         val range = monthRange(month)
         return combine(
             db.transactionDao().observeTotals(range.first, range.last + 1),
-            db.budgetDao().observe(month.toString()),
-            db.budgetDao().observeDefault()
-        ) { totals, override, defaultBudget ->
-            MonthlySummary(month, totals.income, totals.expense, override?.amount ?: defaultBudget?.amount)
+            db.categoryDao().observeActive(),
+            db.budgetDao().observeCategoryBudgets()
+        ) { totals, categories, budgets ->
+            val activeExpenseIds = categories
+                .filter { it.type == TransactionType.EXPENSE }
+                .mapTo(mutableSetOf()) { it.id }
+            val totalBudget = budgets
+                .filter { it.categoryId in activeExpenseIds }
+                .sumOf { it.amount }
+                .takeIf { it > 0 }
+            MonthlySummary(month, totals.income, totals.expense, totalBudget)
         }
     }
-
-    fun observeDefaultBudget(): Flow<Long?> = db.budgetDao().observeDefault().map { it?.amount }
-
-    fun observeMonthlyBudget(month: YearMonth): Flow<Long?> = db.budgetDao().observe(month.toString()).map { it?.amount }
 
     fun observeCategoryBudgetSummaries(month: YearMonth): Flow<List<CategoryBudgetSummary>> {
         val range = monthRange(month)
@@ -121,22 +122,6 @@ class KakeiboRepository(private val db: AppDatabase) {
 
     suspend fun deleteTransaction(id: Long) {
         db.transactionDao().findWithCategory(id)?.let { db.transactionDao().delete(it.transaction) }
-    }
-
-    suspend fun saveBudget(month: YearMonth, amount: Long?) {
-        if (amount == null) db.budgetDao().delete(month.toString())
-        else {
-            require(amount in 1..MAX_AMOUNT_YEN) { "予算は1円から${MAX_AMOUNT_YEN}円までで入力してください" }
-            db.budgetDao().upsert(MonthlyBudgetEntity(month.toString(), amount))
-        }
-    }
-
-    suspend fun saveDefaultBudget(amount: Long?) {
-        if (amount == null) db.budgetDao().deleteDefault()
-        else {
-            require(amount in 1..MAX_AMOUNT_YEN) { "予算は1円から${MAX_AMOUNT_YEN}円までで入力してください" }
-            db.budgetDao().upsertDefault(BudgetSettingsEntity(amount = amount))
-        }
     }
 
     suspend fun saveCategoryBudget(categoryId: Long, amount: Long?) {
