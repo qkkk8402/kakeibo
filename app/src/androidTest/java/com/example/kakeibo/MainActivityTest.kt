@@ -10,7 +10,13 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.test.platform.app.InstrumentationRegistry
+import com.example.kakeibo.data.AppDatabase
 import java.time.YearMonth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -18,6 +24,14 @@ import org.junit.Test
 class MainActivityTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<MainActivity>()
+
+    @Before
+    fun clearTransactions() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        withContext(Dispatchers.IO) {
+            AppDatabase.get(context).transactionDao().deleteAll()
+        }
+    }
 
     private fun enterAmount(value: String) {
         value.forEach { digit ->
@@ -108,6 +122,9 @@ class MainActivityTest {
             click()
         }
 
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("7,654,321円").fetchSemanticsNodes().size == 2
+        }
         composeRule.onAllNodesWithText("7,654,321円").assertCountEquals(2)
         composeRule.onAllNodesWithText("15,308,642円").assertCountEquals(0)
     }

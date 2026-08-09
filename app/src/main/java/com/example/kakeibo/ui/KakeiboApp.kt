@@ -99,6 +99,7 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.YearMonth
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -578,6 +579,7 @@ private fun EditorScreen(
     var isDatePickerVisible by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
+    val saveGuard = remember { AtomicBoolean(false) }
     var loaded by rememberSaveable { mutableStateOf(transactionId == null) }
     val currentType = TransactionType.valueOf(type)
     val visibleCategories = categories.filter { it.type == currentType }
@@ -592,19 +594,19 @@ private fun EditorScreen(
     }
 
     fun saveTransaction() {
-        if (!isSaving) {
-            val parsed = parseAmountText(amount)
-            amountError = validateAmountText(amount)
-            categoryError = if (categoryId == null) "カテゴリを選択してください" else null
-            if (amountError == null && categoryError == null) {
-                isSaving = true
-                scope.launch(Dispatchers.Main.immediate) {
-                    try {
-                        repository.saveTransaction(transactionId, currentType, parsed!!, categoryId!!, LocalDate.parse(dateText), memo)
-                        onBack()
-                    } finally {
-                        isSaving = false
-                    }
+        val parsed = parseAmountText(amount)
+        amountError = validateAmountText(amount)
+        categoryError = if (categoryId == null) "カテゴリを選択してください" else null
+        if (amountError == null && categoryError == null && saveGuard.compareAndSet(false, true)) {
+            isSaving = true
+            scope.launch(Dispatchers.Main.immediate) {
+                try {
+                    repository.saveTransaction(transactionId, currentType, parsed!!, categoryId!!, LocalDate.parse(dateText), memo)
+                    onBack()
+                } catch (error: Throwable) {
+                    saveGuard.set(false)
+                    isSaving = false
+                    throw error
                 }
             }
         }
