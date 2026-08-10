@@ -33,8 +33,8 @@ android {
         applicationId = "com.qkkk8402.kakeibo"
         minSdk = 26
         targetSdk = 36
-        versionCode = providers.gradleProperty("releaseVersionCode").map { it.toInt() }.orElse(1).get()
-        versionName = providers.gradleProperty("releaseVersionName").orElse("0.1.0").get()
+        versionCode = providers.gradleProperty("releaseVersionCode").map { it.toInt() }.orElse(3000).get()
+        versionName = providers.gradleProperty("releaseVersionName").orElse("0.3.0").get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables { useSupportLibrary = true }
